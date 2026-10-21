@@ -1,7 +1,14 @@
-FROM php:7.4-fpm-bullseye
+FROM php:7.4.33-fpm-bullseye
 
 ARG DEBIAN_SNAPSHOT=20240801T000000Z
+ARG PHP_BUILD_JOBS=2
 ENV COMPOSER_ALLOW_SUPERUSER=1
+
+LABEL io.pairox.php.security-backport="712e60f9edfd03f0960fc4fc3c2c375f42b90aa2"
+
+COPY docker/patches/php74-security.patch /tmp/php74-security.patch
+COPY docker/rebuild-php.sh /tmp/rebuild-php.sh
+COPY docker/verify-php-security.sh /usr/local/bin/verify-php-security
 
 # PHP 7.4 is EOL and its Bullseye package versions are no longer kept in sync
 # on the live mirrors. A Debian snapshot makes builds reproducible.
@@ -12,6 +19,14 @@ RUN sed -i \
       /etc/apt/sources.list \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && apt-get install -y --no-install-recommends \
+      $PHPIZE_DEPS \
+      patch \
+      libargon2-dev \
+      libcurl4-openssl-dev \
+      libreadline-dev \
+      libsodium-dev \
+      libssl-dev \
+      libxml2-dev \
       ca-certificates \
       curl \
       git \
@@ -30,6 +45,8 @@ RUN sed -i \
       postgresql-client \
       supervisor \
       zlib1g-dev \
+    && sh /tmp/rebuild-php.sh \
+    && rm /tmp/rebuild-php.sh \
     && curl --fail --location --retry 5 --retry-delay 2 https://pecl.php.net/get/memcached-3.2.0.tgz --output /tmp/memcached.tgz \
     && pecl install /tmp/memcached.tgz \
     && curl --fail --location --retry 5 --retry-delay 2 https://pecl.php.net/get/imagick-3.7.0.tgz --output /tmp/imagick.tgz \
@@ -56,5 +73,8 @@ RUN sed -i \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
+RUN chmod +x /usr/local/bin/verify-php-security \
+    && /usr/local/bin/verify-php-security
 
 WORKDIR /var/www

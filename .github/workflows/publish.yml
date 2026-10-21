@@ -39,8 +39,22 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: false
+          load: true
+          pull: true
+          no-cache: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify patched PHP before publishing
+        run: docker run --rm --entrypoint sh ghcr.io/${{ github.repository_owner }}/debian74:7.4 /usr/local/bin/verify-php-security
+
+      - name: Publish verified image
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r image_tag; do
+            [ -z "$image_tag" ] || docker push "$image_tag"
+          done <<< "$IMAGE_TAGS"
